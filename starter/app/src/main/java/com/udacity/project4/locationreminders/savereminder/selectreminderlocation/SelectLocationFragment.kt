@@ -2,62 +2,125 @@ package com.udacity.project4.locationreminders.savereminder.selectreminderlocati
 
 
 import android.Manifest
-import android.app.Activity
-import android.content.Intent
-import android.content.IntentSender
+import android.content.Context
 import android.content.pm.PackageManager
-import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.location.Criteria
+import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.*
+import androidx.annotation.DrawableRes
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.ResolvableApiException
-import com.google.android.gms.location.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.*
-import com.google.android.material.snackbar.Snackbar
 import com.udacity.project4.R
 import com.udacity.project4.base.BaseFragment
-import com.udacity.project4.base.NavigationCommand
 import com.udacity.project4.databinding.FragmentSelectLocationBinding
 import com.udacity.project4.locationreminders.savereminder.SaveReminderViewModel
 import com.udacity.project4.utils.setDisplayHomeAsUpEnabled
 import org.koin.android.ext.android.inject
+
+
+private const val TAG = "SelectLocationFragment"
+private const val DEFAULT_ZOOM_LEVEL = 16F
+private const val LOCATION_PERMISSION_REQUEST_CODE = 101
 
 class SelectLocationFragment : BaseFragment() {
 
     //Use Koin to get the view model of the SaveReminder
     override val _viewModel: SaveReminderViewModel by inject()
     private lateinit var binding: FragmentSelectLocationBinding
+    private lateinit var googleMap: GoogleMap
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View? {
-        binding =
-            DataBindingUtil.inflate(inflater, R.layout.fragment_select_location, container, false)
-
+        Log.d(TAG, "On CreateView")
+        binding = DataBindingUtil.inflate(inflater, R.layout.fragment_select_location, container, false)
         binding.viewModel = _viewModel
         binding.lifecycleOwner = this
-
         setHasOptionsMenu(true)
         setDisplayHomeAsUpEnabled(true)
 
-//        TODO: add the map setup implementation
-//        TODO: zoom to the user location after taking his permission
-//        TODO: add style to the map
-//        TODO: put a marker to location that the user selected
+//        Done: add the map setup implementation
+        val mapFragment = childFragmentManager.findFragmentById(R.id.map) as SupportMapFragment?
+        mapFragment?.getMapAsync {
+            googleMap = it
 
+//        TODO: zoom to the user location after taking his permission
+            it.checkPermissionsAndSetupZoom()
+
+
+//        Done: add style to the map
+            it.setMapStyle(
+                MapStyleOptions.loadRawResourceStyle(
+                    requireContext(), R.raw.map_style
+                )
+            )
+
+//        Done: put a marker to location that the user selected
+            it.setOnMapClickListener { latLng ->
+                googleMap.clear()
+                googleMap.addMarker(
+                    MarkerOptions()
+                        .title(getString(R.string.dropped_pin))
+                        .icon(requireContext().getBitmapDescriptor(R.drawable.ic_location))
+                        .position(latLng)
+                )
+            }
+        }
 
 //        TODO: call this function after the user confirms on the selected location
         onLocationSelected()
 
         return binding.root
     }
+
+    private fun Context.getBitmapDescriptor(@DrawableRes vectorResId: Int): BitmapDescriptor? {
+        val vectorDrawable = ContextCompat.getDrawable(this, vectorResId)
+        val colourWhite = ContextCompat.getColor(this, R.color.white)
+        vectorDrawable!!.apply {
+            setBounds(0, 0, vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) setTint(colourWhite)
+        }
+        val bitmap = Bitmap.createBitmap(vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        vectorDrawable.draw(canvas)
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
+
+    private fun GoogleMap.checkPermissionsAndSetupZoom() {
+        if (!(ActivityCompat.checkSelfPermission(
+                requireContext(), Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED)
+        ) {
+            isMyLocationEnabled = true
+            val locationManager = requireActivity().getSystemService(AppCompatActivity.LOCATION_SERVICE) as LocationManager
+            val location = locationManager.getBestProvider(Criteria(), true)?.let { locationManager.getLastKnownLocation(it) }
+            location?.let {
+                moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), DEFAULT_ZOOM_LEVEL))
+            }
+        } else {
+            requestPermissions(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ), LOCATION_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
 
     private fun onLocationSelected() {
         //        TODO: When the user confirms on the selected location,
@@ -68,6 +131,19 @@ class SelectLocationFragment : BaseFragment() {
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.map_options, menu)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+            var successful = false
+            if (grantResults.isNotEmpty()) successful = true
+            grantResults.forEach {
+                if (it != PackageManager.PERMISSION_GRANTED) successful = false
+            }
+            if (successful) googleMap.checkPermissionsAndSetupZoom()
+            else _viewModel.showErrorMessage.value = getString(R.string.permission_denied_explanation)
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
