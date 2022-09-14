@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.location.Criteria
+import android.location.Geocoder
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +24,7 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.*
 import com.udacity.project4.R
 import com.udacity.project4.base.BaseFragment
+import com.udacity.project4.base.NavigationCommand
 import com.udacity.project4.databinding.FragmentSelectLocationBinding
 import com.udacity.project4.locationreminders.savereminder.SaveReminderViewModel
 import com.udacity.project4.utils.setDisplayHomeAsUpEnabled
@@ -42,9 +44,10 @@ class SelectLocationFragment : BaseFragment() {
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         Log.d(TAG, "On CreateView")
-        binding = DataBindingUtil.inflate(inflater, R.layout.fragment_select_location, container, false)
+        binding =
+            DataBindingUtil.inflate(inflater, R.layout.fragment_select_location, container, false)
         binding.viewModel = _viewModel
         binding.lifecycleOwner = this
         setHasOptionsMenu(true)
@@ -52,22 +55,22 @@ class SelectLocationFragment : BaseFragment() {
 
 //        Done: add the map setup implementation
         val mapFragment = childFragmentManager.findFragmentById(R.id.map) as SupportMapFragment?
-        mapFragment?.getMapAsync {
-            googleMap = it
+        mapFragment?.getMapAsync { gMap ->
+            googleMap = gMap
 
-//        TODO: zoom to the user location after taking his permission
-            it.checkPermissionsAndSetupZoom()
+//        Done: zoom to the user location after taking his permission
+            gMap.checkPermissionsAndSetupZoom()
 
 
 //        Done: add style to the map
-            it.setMapStyle(
+            gMap.setMapStyle(
                 MapStyleOptions.loadRawResourceStyle(
                     requireContext(), R.raw.map_style
                 )
             )
 
 //        Done: put a marker to location that the user selected
-            it.setOnMapClickListener { latLng ->
+            gMap.setOnMapClickListener { latLng ->
                 googleMap.clear()
                 googleMap.addMarker(
                     MarkerOptions()
@@ -75,11 +78,22 @@ class SelectLocationFragment : BaseFragment() {
                         .icon(requireContext().getBitmapDescriptor(R.drawable.ic_location))
                         .position(latLng)
                 )
+                val geocoder = Geocoder(context)
+                _viewModel.reminderSelectedLocationStr.value =
+                    geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1).getOrNull(0)
+                        ?.let {
+                            "${it.subThoroughfare} ${it.thoroughfare}"
+                        } ?: "Unknown"
+                _viewModel.selectedPOI.value = PointOfInterest(latLng, "", "")
+                _viewModel.latitude.value = latLng.latitude
+                _viewModel.longitude.value = latLng.longitude
             }
         }
 
-//        TODO: call this function after the user confirms on the selected location
-        onLocationSelected()
+//        Done: call this function after the user confirms on the selected location
+        binding.saveButton.setOnClickListener {
+            onLocationSelected()
+        }
 
         return binding.root
     }
@@ -91,7 +105,11 @@ class SelectLocationFragment : BaseFragment() {
             setBounds(0, 0, vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) setTint(colourWhite)
         }
-        val bitmap = Bitmap.createBitmap(vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(
+            vectorDrawable.intrinsicWidth,
+            vectorDrawable.intrinsicHeight,
+            Bitmap.Config.ARGB_8888
+        )
         val canvas = Canvas(bitmap)
         vectorDrawable.draw(canvas)
         return BitmapDescriptorFactory.fromBitmap(bitmap)
@@ -106,10 +124,19 @@ class SelectLocationFragment : BaseFragment() {
             ) != PackageManager.PERMISSION_GRANTED)
         ) {
             isMyLocationEnabled = true
-            val locationManager = requireActivity().getSystemService(AppCompatActivity.LOCATION_SERVICE) as LocationManager
-            val location = locationManager.getBestProvider(Criteria(), true)?.let { locationManager.getLastKnownLocation(it) }
+            val locationManager =
+                requireActivity().getSystemService(AppCompatActivity.LOCATION_SERVICE) as LocationManager
+            val location = locationManager.getBestProvider(Criteria(), true)
+                ?.let { locationManager.getLastKnownLocation(it) }
             location?.let {
-                moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), DEFAULT_ZOOM_LEVEL))
+                moveCamera(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(
+                            location.latitude,
+                            location.longitude
+                        ), DEFAULT_ZOOM_LEVEL
+                    )
+                )
             }
         } else {
             requestPermissions(
@@ -126,6 +153,7 @@ class SelectLocationFragment : BaseFragment() {
         //        TODO: When the user confirms on the selected location,
         //         send back the selected location details to the view model
         //         and navigate back to the previous fragment to save the reminder and add the geofence
+        _viewModel.navigationCommand.value = NavigationCommand.Back
     }
 
 
@@ -133,7 +161,11 @@ class SelectLocationFragment : BaseFragment() {
         inflater.inflate(R.menu.map_options, menu)
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             var successful = false
@@ -142,7 +174,8 @@ class SelectLocationFragment : BaseFragment() {
                 if (it != PackageManager.PERMISSION_GRANTED) successful = false
             }
             if (successful) googleMap.checkPermissionsAndSetupZoom()
-            else _viewModel.showErrorMessage.value = getString(R.string.permission_denied_explanation)
+            else _viewModel.showErrorMessage.value =
+                getString(R.string.permission_denied_explanation)
         }
     }
 
