@@ -61,25 +61,25 @@ class SaveReminderViewModelTest {
     }
 
     @Test
-    fun testValidationLogicWithGoodData() {
+    fun testValidationLogicWithGoodData_shouldReturnNoError() {
         val result = viewModel.validateAndSaveReminder(goodReminderDataItem)
         assertThat(result).isTrue()
     }
 
     @Test
-    fun testValidationLogicWithNoLocation() {
+    fun testValidationLogicWithNoLocation_shouldReturnError() {
         val result = viewModel.validateAndSaveReminder(noLocationReminderDataItem)
         assertThat(result).isFalse()
     }
 
 
     @Test
-    fun testValidationLogicWithEmptyTitle() {
+    fun testValidationLogicWithEmptyTitle_shouldReturnError() {
         val result = viewModel.validateAndSaveReminder(emptyTitleReminderDataItem)
         assertThat(result).isFalse()
     }
 
-    fun testLoading() {
+    fun check_loading() {
         mainCoroutineRule.pauseDispatcher()
         viewModel.validateAndSaveReminder(goodReminderDataItem)
         assertThat(viewModel.showLoading.value).isTrue()
