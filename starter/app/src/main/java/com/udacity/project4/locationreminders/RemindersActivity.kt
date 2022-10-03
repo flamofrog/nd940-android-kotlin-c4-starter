@@ -18,10 +18,19 @@ import kotlinx.android.synthetic.main.activity_reminders.*
 private const val TAG = "RemindersActivity"
 class RemindersActivity : AppCompatActivity() {
 
+    private val isRunningTest : Boolean by lazy {
+        try {
+            Class.forName("androidx.test.espresso.Espresso")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_reminders)
-        if (FirebaseAuth.getInstance().currentUser == null) launchAuthenticationActivity()
+        if (FirebaseAuth.getInstance().currentUser == null && !isRunningTest) launchAuthenticationActivity()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
