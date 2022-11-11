@@ -20,7 +20,7 @@ import org.koin.core.context.stopKoin
 @ExperimentalCoroutinesApi
 class RemindersListViewModelTest {
 
-    //TODO: provide testing to the RemindersListViewModel and its live data objects
+    //Done: provide testing to the RemindersListViewModel and its live data objects
 
     private lateinit var repository: FakeDataSource
     private lateinit var viewModel: RemindersListViewModel

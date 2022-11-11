@@ -22,7 +22,7 @@ private const val TAG = "GeofenceBroadcastReceiv"
 
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-//TODO: implement the onReceive method to receive the geofencing events at the background
+//Done: implement the onReceive method to receive the geofencing events at the background
         Log.i(TAG, "onReceive")
         if (intent.action == ACTION_GEOFENCE_EVENT) {
             Log.i(TAG, "onReceive - Geofence Event")
