@@ -1,13 +1,21 @@
 package com.udacity.project4.utils
 
 import android.view.View
+import android.widget.TextView
 import androidx.databinding.BindingAdapter
 import androidx.lifecycle.LiveData
 import androidx.recyclerview.widget.RecyclerView
+import com.udacity.project4.R
 import com.udacity.project4.base.BaseRecyclerViewAdapter
 
 
 object BindingAdapters {
+
+    @BindingAdapter("setReminderLocation")
+    @JvmStatic
+    fun TextView.setReminderLocation(str: String?) {
+        text = str ?: context.getString(R.string.reminder_location)
+    }
 
     /**
      * Use binding adapter to set the recycler view data using livedata object

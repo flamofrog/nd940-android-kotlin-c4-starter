@@ -85,6 +85,7 @@ class RemindersLocalRepositoryTest {
         val reminderRes = repository.getReminder(reminder.id)
 
         Assert.assertTrue(reminderRes is com.udacity.project4.locationreminders.data.dto.Result.Error)
+        Assert.assertEquals("Reminder not found!", (reminderRes as com.udacity.project4.locationreminders.data.dto.Result.Error).message)
     }
 
     fun deleteAllTest() = runBlocking {

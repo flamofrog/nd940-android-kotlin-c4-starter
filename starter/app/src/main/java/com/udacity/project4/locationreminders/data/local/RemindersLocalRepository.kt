@@ -30,7 +30,7 @@ class RemindersLocalRepository(
             return@withContext try {
                 Result.Success(remindersDao.getReminders())
             } catch (ex: Exception) {
-                Result.Error(ex.localizedMessage)
+                Result.Error("Could not get Reminders")
             }
         }
     }

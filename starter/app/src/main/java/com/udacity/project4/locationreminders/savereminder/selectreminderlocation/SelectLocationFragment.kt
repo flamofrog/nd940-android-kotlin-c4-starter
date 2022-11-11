@@ -2,6 +2,7 @@ package com.udacity.project4.locationreminders.savereminder.selectreminderlocati
 
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -18,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
+import androidx.navigation.fragment.findNavController
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.SupportMapFragment
@@ -27,18 +29,20 @@ import com.udacity.project4.base.BaseFragment
 import com.udacity.project4.base.NavigationCommand
 import com.udacity.project4.databinding.FragmentSelectLocationBinding
 import com.udacity.project4.locationreminders.savereminder.SaveReminderViewModel
+import com.udacity.project4.locationreminders.savereminder.requestEnableLocation
 import com.udacity.project4.utils.setDisplayHomeAsUpEnabled
-import org.koin.android.ext.android.inject
+import org.koin.androidx.viewmodel.ext.android.sharedViewModel
 
 
 private const val TAG = "SelectLocationFragment"
 private const val DEFAULT_ZOOM_LEVEL = 16F
 private const val LOCATION_PERMISSION_REQUEST_CODE = 101
+private const val LOCATION_PERMISSION_REQUEST_CODE_PRE_BACKGROUND = 102
 
 class SelectLocationFragment : BaseFragment() {
 
     //Use Koin to get the view model of the SaveReminder
-    override val _viewModel: SaveReminderViewModel by inject()
+    override val _viewModel: SaveReminderViewModel by sharedViewModel()
     private lateinit var binding: FragmentSelectLocationBinding
     private lateinit var googleMap: GoogleMap
 
@@ -70,24 +74,7 @@ class SelectLocationFragment : BaseFragment() {
             )
 
 //        Done: put a marker to location that the user selected
-            gMap.setOnMapClickListener { latLng ->
-                googleMap.clear()
-                googleMap.addMarker(
-                    MarkerOptions()
-                        .title(getString(R.string.dropped_pin))
-                        .icon(requireContext().getBitmapDescriptor(R.drawable.ic_location))
-                        .position(latLng)
-                )
-                val geocoder = Geocoder(context)
-                _viewModel.reminderSelectedLocationStr.value =
-                    geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1).getOrNull(0)
-                        ?.let {
-                            "${it.subThoroughfare} ${it.thoroughfare}"
-                        } ?: "Unknown"
-                _viewModel.selectedPOI.value = PointOfInterest(latLng, "", "")
-                _viewModel.latitude.value = latLng.latitude
-                _viewModel.longitude.value = latLng.longitude
-            }
+            setPoiClick(gMap)
         }
 
 //        Done: call this function after the user confirms on the selected location
@@ -117,33 +104,59 @@ class SelectLocationFragment : BaseFragment() {
 
 
     private fun GoogleMap.checkPermissionsAndSetupZoom() {
-        if (!(ActivityCompat.checkSelfPermission(
-                requireContext(), Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED)
-        ) {
-            isMyLocationEnabled = true
-            val locationManager =
-                requireActivity().getSystemService(AppCompatActivity.LOCATION_SERVICE) as LocationManager
-            val location = locationManager.getBestProvider(Criteria(), true)
-                ?.let { locationManager.getLastKnownLocation(it) }
-            location?.let {
-                moveCamera(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(
-                            location.latitude,
-                            location.longitude
-                        ), DEFAULT_ZOOM_LEVEL
-                    )
-                )
+        val backgroundPermission = if (Build.VERSION.SDK_INT >= 29) {
+            ActivityCompat.checkSelfPermission(
+                requireContext(), Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        } else false
+        val coarsePermission = ActivityCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+        val finePermission = ActivityCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+        if (!(finePermission || coarsePermission || backgroundPermission)) {
+            if (isLocationEnabled()) {
+                setupZoom()
+            } else {
+                requestEnableLocation(requireContext()) {
+                    setupZoom()
+                }
             }
         } else {
-            requestPermissions(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ), LOCATION_PERMISSION_REQUEST_CODE
+            if (Build.VERSION.SDK_INT >= 29) {
+                requestPermissions(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ), LOCATION_PERMISSION_REQUEST_CODE_PRE_BACKGROUND
+                )
+            } else {
+                requestPermissions(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ), LOCATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun GoogleMap.setupZoom() {
+        isMyLocationEnabled = true
+        val locationManager =
+            requireActivity().getSystemService(AppCompatActivity.LOCATION_SERVICE) as LocationManager
+        val location = locationManager.getBestProvider(Criteria(), true)
+            ?.let { locationManager.getLastKnownLocation(it) }
+        location?.let {
+            moveCamera(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(
+                        location.latitude,
+                        location.longitude
+                    ), DEFAULT_ZOOM_LEVEL
+                )
             )
         }
     }
@@ -161,21 +174,47 @@ class SelectLocationFragment : BaseFragment() {
         inflater.inflate(R.menu.map_options, menu)
     }
 
+    private fun isLocationEnabled(): Boolean {
+        val locationManager = requireContext().getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE_PRE_BACKGROUND) {
+            var successful = false
+            if (grantResults.isNotEmpty()) successful = true
+            grantResults.forEach {
+                if (it != PackageManager.PERMISSION_GRANTED) successful = false
+            }
+            if (successful) {
+                if (Build.VERSION.SDK_INT >= 29)
+                    requestPermissions(
+                        arrayOf(
+                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                        ), LOCATION_PERMISSION_REQUEST_CODE
+                    )
+            } else {
+                _viewModel.showErrorMessage.value =
+                    getString(R.string.permission_denied_explanation)
+                findNavController().navigateUp()
+            }
+        } else if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             var successful = false
             if (grantResults.isNotEmpty()) successful = true
             grantResults.forEach {
                 if (it != PackageManager.PERMISSION_GRANTED) successful = false
             }
             if (successful) googleMap.checkPermissionsAndSetupZoom()
-            else _viewModel.showErrorMessage.value =
-                getString(R.string.permission_denied_explanation)
+            else {
+                _viewModel.showErrorMessage.value =
+                    getString(R.string.permission_denied_explanation)
+                findNavController().navigateUp()
+            }
         }
     }
 
@@ -200,5 +239,24 @@ class SelectLocationFragment : BaseFragment() {
         else -> super.onOptionsItemSelected(item)
     }
 
-
+    private fun setPoiClick(map: GoogleMap) {
+        map.setOnPoiClickListener { poi ->
+            val poiMarker = map.addMarker(
+                MarkerOptions()
+                    .title(poi.name)
+                    .icon(requireContext().getBitmapDescriptor(R.drawable.ic_location))
+                    .position(poi.latLng)
+            )
+            poiMarker.showInfoWindow()
+            val geocoder = Geocoder(context)
+            _viewModel.reminderSelectedLocationStr.value =
+                geocoder.getFromLocation(poi.latLng.latitude, poi.latLng.longitude, 1).getOrNull(0)
+                    ?.let {
+                        "${poi.name}, ${it.subThoroughfare} ${it.thoroughfare}"
+                    } ?: poi.name
+            _viewModel.selectedPOI.value = PointOfInterest(poi.latLng, "", "")
+            _viewModel.latitude.value = poi.latLng.latitude
+            _viewModel.longitude.value = poi.latLng.longitude
+        }
+    }
 }

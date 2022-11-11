@@ -1,20 +1,20 @@
 package com.udacity.project4
 
 import android.app.Application
-import android.view.View
-import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
-import androidx.test.core.app.ApplicationProvider.getApplicationContext
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso
 import androidx.test.espresso.IdlingRegistry
 import androidx.test.espresso.action.ViewActions
 import androidx.test.espresso.assertion.ViewAssertions
+import androidx.test.espresso.matcher.RootMatchers.withDecorView
 import androidx.test.espresso.matcher.ViewMatchers
-import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
+import com.google.android.material.internal.ContextUtils.getActivity
 import com.udacity.project4.locationreminders.RemindersActivity
 import com.udacity.project4.locationreminders.data.ReminderDataSource
 import com.udacity.project4.locationreminders.data.dto.ReminderDTO
@@ -27,10 +27,8 @@ import com.udacity.project4.util.monitorActivity
 import com.udacity.project4.utils.EspressoIdlingResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.hamcrest.Description
-import org.hamcrest.Matcher
-import org.hamcrest.Matchers
-import org.hamcrest.TypeSafeMatcher
+import org.hamcrest.CoreMatchers.`is`
+import org.hamcrest.CoreMatchers.not
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -68,7 +66,7 @@ class RemindersActivityTest :
     @Before
     fun init() {
         stopKoin()//stop the original app koin
-        appContext = getApplicationContext()
+        appContext = ApplicationProvider.getApplicationContext()
         val myModule = module {
             viewModel {
                 RemindersListViewModel(
@@ -113,6 +111,83 @@ class RemindersActivityTest :
 //    Done: add End to End testing to the app
 
     @Test
+    fun testShowMessageOnSaveWithNoTitleOrLocation() {
+        val activityScenario = ActivityScenario.launch(RemindersActivity::class.java)
+        dataBindingIdlingResource.monitorActivity(activityScenario)
+        Espresso.onView(withId(R.id.addReminderFAB)).perform(ViewActions.click())
+
+        Espresso.onView(withId(R.id.reminderDescription)).perform(
+            ViewActions.typeText("test description"),
+            ViewActions.closeSoftKeyboard()
+        )
+        runBlocking { delay(100) }
+
+        Espresso.onView(withId(R.id.selectLocation)).perform(ViewActions.click())
+        val viewModel: SaveReminderViewModel = get()
+
+        viewModel.latitude.postValue(0.0)// = 0.0
+        viewModel.longitude.postValue(0.0)//.value = 0.0
+        viewModel.reminderSelectedLocationStr.postValue("some location")
+        viewModel.selectedPOI.postValue(PointOfInterest(LatLng(0.0, 0.0), "", ""))
+
+        Espresso.onView(withId(R.id.save_button)).perform(ViewActions.click())
+        Espresso.onView(withId(R.id.saveReminder)).perform(ViewActions.click())
+
+        Espresso.onView(withId(com.google.android.material.R.id.snackbar_text))
+            .check(ViewAssertions.matches(ViewMatchers.withText(R.string.err_enter_title)))
+
+        activityScenario.close()
+    }
+
+    @Test
+    fun testShowToastOnSuccessfulSave() {
+        val activityScenario = ActivityScenario.launch(RemindersActivity::class.java)
+        dataBindingIdlingResource.monitorActivity(activityScenario)
+        Espresso.onView(withId(R.id.addReminderFAB)).perform(ViewActions.click())
+        runBlocking { delay(100) }
+
+        Espresso.onView(withId(R.id.reminderTitle))
+            .perform(
+                ViewActions.typeText("test"),
+                ViewActions.closeSoftKeyboard()
+            )
+
+        Espresso.onView(withId(R.id.reminderDescription)).perform(
+            ViewActions.typeText("test description"),
+            ViewActions.closeSoftKeyboard()
+        )
+        runBlocking { delay(100) }
+
+        Espresso.onView(withId(R.id.selectLocation)).perform(ViewActions.click())
+        val viewModel: SaveReminderViewModel = get()
+
+        viewModel.latitude.postValue(0.0)// = 0.0
+        viewModel.longitude.postValue(0.0)//.value = 0.0
+        viewModel.reminderSelectedLocationStr.postValue("some location")
+        viewModel.selectedPOI.postValue(PointOfInterest(LatLng(0.0, 0.0), "", ""))
+
+        Espresso.onView(withId(R.id.save_button)).perform(ViewActions.click())
+        runBlocking { delay(300) }
+
+        Espresso.onView(withId(R.id.saveReminder)).perform(ViewActions.click())
+        runBlocking { delay(300) }
+
+        Espresso.onView(withText(R.string.reminder_saved))
+            .inRoot(
+                withDecorView(
+                    not(
+                        `is`(
+                            getActivity(appContext)?.window?.decorView
+                        )
+                    )
+                )
+            )
+            .check(ViewAssertions.matches(isDisplayed()))
+
+        activityScenario.close()
+    }
+
+    @Test
     fun fullSaveReminderTest() {
         val activityScenario = ActivityScenario.launch(RemindersActivity::class.java)
         dataBindingIdlingResource.monitorActivity(activityScenario)
@@ -125,8 +200,6 @@ class RemindersActivityTest :
         Espresso.onView(withId(R.id.reminderTitle))
             .check(ViewAssertions.matches(ViewMatchers.withHint("Reminder Title")))
 
-        Espresso.onView(withId(R.id.selectLocation))
-            .check(ViewAssertions.matches(ViewMatchers.withText("Reminder Location")))
         Espresso.onView(withId(R.id.selectLocation)).perform(ViewActions.click())
 
         val viewModel: SaveReminderViewModel = get()
@@ -164,5 +237,7 @@ class RemindersActivityTest :
         Espresso.onView(withId(com.firebase.ui.auth.R.id.email_button))
             .check(ViewAssertions.matches(ViewMatchers.isDisplayed()))
             .check(ViewAssertions.matches(ViewMatchers.withText("Sign in with email")))
+
+        activityScenario.close()
     }
 }

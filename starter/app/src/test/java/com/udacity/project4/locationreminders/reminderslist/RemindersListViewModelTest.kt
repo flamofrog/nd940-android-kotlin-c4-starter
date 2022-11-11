@@ -1,15 +1,16 @@
 package com.udacity.project4.locationreminders.reminderslist
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.udacity.project4.locationreminders.MainCoroutineRule
 import com.udacity.project4.locationreminders.data.FakeDataSource
 import com.udacity.project4.locationreminders.data.dto.ReminderDTO
 import com.udacity.project4.locationreminders.data.dto.Result
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runBlockingTest
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -24,6 +25,9 @@ class RemindersListViewModelTest {
 
     private lateinit var repository: FakeDataSource
     private lateinit var viewModel: RemindersListViewModel
+
+    @get:Rule
+    var mainCoroutineRule = MainCoroutineRule()
 
     @get:Rule
     var instantExecutorRule = InstantTaskExecutorRule()
@@ -55,6 +59,7 @@ class RemindersListViewModelTest {
         repository.saveReminder(reminder1)
         repository.saveReminder(reminder2)
         repository.saveReminder(reminder3)
+        viewModel = RemindersListViewModel(ApplicationProvider.getApplicationContext(), repository)
     }
 
     @After
@@ -62,6 +67,33 @@ class RemindersListViewModelTest {
         stopKoin()
     }
 
+    @Test
+    fun shouldReturnError() = runBlockingTest {
+        repository.setReturnError(true)
+        viewModel.loadReminders()
+        mainCoroutineRule.advanceUntilIdle()
+        assertEquals("Could not get Reminders", viewModel.showSnackBar.value)
+    }
+
+    @Test
+    fun check_Loading() = mainCoroutineRule.runBlockingTest {
+        mainCoroutineRule.pauseDispatcher()
+        viewModel.loadReminders()
+        assertEquals(true, viewModel.showLoading.value)
+
+        mainCoroutineRule.resumeDispatcher()
+        mainCoroutineRule.advanceUntilIdle()
+
+        assertEquals(false, viewModel.showLoading.value)
+    }
+
+    @Test
+    fun getRemindersWhenRemindersAreUnavailable_checkIsErrorAndMessage() = runBlockingTest {
+        repository.setReturnError(true)
+        val reminders = repository.getReminders()
+        assertTrue(reminders is Result.Error)
+        assertEquals("Could not get Reminders", (reminders as Result.Error).message)
+    }
 
     @Test
     fun testRemindersSize() = runBlockingTest {

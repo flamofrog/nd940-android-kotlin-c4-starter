@@ -8,6 +8,12 @@ import kotlinx.coroutines.withContext
 class FakeDataSource(private val locationReminders: MutableList<ReminderDTO> = mutableListOf()) : ReminderDataSource {
 //    Done: Create a fake data source to act as a double to the real data source
 
+    private var shouldReturnError = false
+
+    fun setReturnError(value: Boolean) {
+        shouldReturnError = value
+    }
+
     override suspend fun saveReminder(reminder: ReminderDTO) {
         locationReminders.add(reminder)
     }
@@ -17,10 +23,10 @@ class FakeDataSource(private val locationReminders: MutableList<ReminderDTO> = m
     }
 
     override suspend fun getReminders(): Result<List<ReminderDTO>> {
-        return try {
+        return if(!shouldReturnError) {
             Result.Success(locationReminders)
-        } catch (ex: Exception) {
-            Result.Error(ex.localizedMessage)
+        } else {
+            Result.Error("Could not get Reminders")
         }
     }
 
